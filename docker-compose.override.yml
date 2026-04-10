@@ -1,0 +1,25 @@
+# Overrides values from docker-compose.yml for local development.
+
+services:
+  api:
+    volumes:
+      - ../StockTracker.API/app:/home/appuser/src/app:ro
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      LOG_JSON: "false"
+      LOG_SQL: "true"
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /home/appuser/src/app
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

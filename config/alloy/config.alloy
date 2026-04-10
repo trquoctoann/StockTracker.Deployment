@@ -1,0 +1,84 @@
+// Alloy discovers all Docker containers and forwards their logs
+// to Loki with proper labels for filtering in Grafana.
+
+// ── Step 1: Discover Docker containers ──────────────────────
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// ── Step 2: Relabel — extract useful metadata ───────────────
+discovery.relabel "docker_labels" {
+  targets = discovery.docker.containers.targets
+
+  // Extract clean container name (remove leading slash)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container_name"
+  }
+
+  // Extract compose service name
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  // Extract compose project name
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  // Keep only containers from our compose project
+  rule {
+    source_labels = ["compose_project"]
+    regex         = "stocktracker"
+    action        = "keep"
+  }
+}
+
+// ── Step 3: Collect Docker logs ─────────────────────────────
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_labels.output
+  forward_to = [loki.process.pipeline.receiver]
+}
+
+// ── Step 4: Process — add labels and parse ──────────────────
+loki.process "pipeline" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Try to detect JSON logs and extract level
+  stage.json {
+    expressions = {
+      level   = "level",
+      message = "message",
+      service = "service",
+    }
+  }
+
+  // Normalize log level label
+  stage.labels {
+    values = {
+      level   = "",
+      service = "",
+    }
+  }
+
+  // Drop Alloy's own logs to avoid noise
+  stage.drop {
+    source     = ""
+    expression = ".*component=loki\\.source\\.docker.*"
+    drop_counter_reason = "alloy_internal"
+  }
+}
+
+// ── Step 5: Forward to Loki ─────────────────────────────────
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+
+    // Retry on failure
+    retry_on_http_429 = true
+  }
+}

@@ -1,0 +1,35 @@
+# Jenkins plugins required for the StockTracker CI/CD pipeline.
+#
+# Install via Jenkins CLI:
+#   java -jar jenkins-cli.jar -s http://localhost:9090/ \
+#     install-plugin $(cat jenkins-plugins.txt | tr '\n' ' ')
+#
+# Or mount this file and use install-plugins.sh in Docker.
+
+# Pipeline
+workflow-aggregator
+pipeline-stage-view
+pipeline-utility-steps
+
+# Git
+git
+github
+
+# Docker
+docker-workflow
+docker-commons
+
+# Credentials
+credentials-binding
+plain-credentials
+
+# Build & Test
+junit
+timestamper
+
+# Notifications (optional — uncomment if needed)
+# slack
+
+# UI improvements
+blueocean
+dark-theme
