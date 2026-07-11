@@ -29,10 +29,10 @@ discovery.relabel "docker_labels" {
     target_label  = "compose_project"
   }
 
-  // Keep only containers from our compose project
+  // Keep only containers explicitly opted in for log collection.
   rule {
-    source_labels = ["compose_project"]
-    regex         = "stocktracker"
+    source_labels = ["__meta_docker_container_label_logging"]
+    regex         = "true"
     action        = "keep"
   }
 }

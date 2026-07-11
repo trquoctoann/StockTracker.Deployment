@@ -15,8 +15,6 @@ COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY --chown=appuser:appuser app/ ./app/
-COPY --chown=appuser:appuser alembic/ ./alembic/
-COPY --chown=appuser:appuser alembic.ini ./
 
 # Stage 2: Runtime
 FROM python:3.12-slim AS runtime
@@ -28,17 +26,15 @@ WORKDIR /home/appuser/src
 
 COPY --from=builder --chown=appuser:appuser /home/appuser/src/.venv /home/appuser/src/.venv
 COPY --from=builder --chown=appuser:appuser /home/appuser/src/app ./app
-COPY --from=builder --chown=appuser:appuser /home/appuser/src/alembic ./alembic
-COPY --from=builder --chown=appuser:appuser /home/appuser/src/alembic.ini ./
 
 ENV PATH="/home/appuser/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 USER appuser
-EXPOSE 8000
+EXPOSE 8001
 
 HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "uvloop", "--http", "httptools"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]

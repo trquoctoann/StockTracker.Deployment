@@ -1,0 +1,17 @@
+groups:
+  - name: stocktracker-availability
+    rules:
+      - alert: StockTrackerTargetDown
+        expr: up{job=~"stocktracker-api|stocktracker-datacollector|postgres|redis|rabbitmq"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target is unavailable"
+      - alert: RabbitMQQueueBacklog
+        expr: rabbitmq_queue_messages_ready > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ queue {{ $labels.queue }} has a sustained backlog"

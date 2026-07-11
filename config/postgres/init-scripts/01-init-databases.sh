@@ -1,3 +1,4 @@
+#!/bin/sh
 set -euo pipefail
 
 echo "==> Creating Keycloak database and user..."

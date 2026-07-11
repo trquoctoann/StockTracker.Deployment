@@ -25,6 +25,18 @@
       {
         "name": "admin",
         "description": "Administrator role"
+      },
+      {
+        "name": "system_admin",
+        "description": "System administrator role for service-to-service communication"
+      },
+      {
+        "name": "data_ingest",
+        "description": "Write catalog and market data through ingestion endpoints"
+      },
+      {
+        "name": "pipeline_operator",
+        "description": "Start and inspect DataCollector pipeline jobs"
       }
     ]
   },
@@ -34,7 +46,7 @@
       "name": "StockTracker API",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "CHANGE_ME_CLIENT_SECRET",
+      "secret": "CHANGE_ME_API_CLIENT_SECRET",
       "redirectUris": ["http://localhost:8000/*", "http://localhost:3000/*"],
       "webOrigins": ["http://localhost:8000", "http://localhost:3000"],
       "standardFlowEnabled": true,
@@ -49,6 +61,60 @@
         "email",
         "roles"
       ]
+    },
+    {
+      "clientId": "data-collector-service",
+      "name": "StockTracker DataCollector",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGE_ME_DATACOLLECTOR_CLIENT_SECRET",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "roles"
+      ],
+      "protocolMappers": [
+        {
+          "name": "stocktracker-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "stocktracker.api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "collector-introspection-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "data-collector-service",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-data-collector-service",
+      "enabled": true,
+      "serviceAccountClientId": "data-collector-service",
+      "realmRoles": ["data_ingest", "pipeline_operator"]
     }
   ],
   "defaultDefaultClientScopes": [

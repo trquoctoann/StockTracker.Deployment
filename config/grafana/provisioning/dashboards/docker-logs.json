@@ -13,7 +13,7 @@
       "title": "Log Volume by Service",
       "type": "barchart",
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "sum by (compose_service) (count_over_time({compose_project=\"stocktracker\", compose_service=~\"$service\"} [$__interval]))",
@@ -49,7 +49,7 @@
       "title": "Live Logs",
       "type": "logs",
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 6 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "{compose_project=\"stocktracker\", compose_service=~\"$service\"} |= `$search`",
@@ -71,7 +71,7 @@
       "title": "Errors Only",
       "type": "logs",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "{compose_project=\"stocktracker\", compose_service=~\"$service\"} | json | level =~ `(?i)(error|critical|fatal)`",
@@ -97,7 +97,7 @@
     "list": [
       {
         "current": { "selected": true, "text": "All", "value": "$__all" },
-        "datasource": { "type": "loki", "uid": "" },
+        "datasource": { "type": "loki", "uid": "loki" },
         "definition": "label_values({compose_project=\"stocktracker\"}, compose_service)",
         "includeAll": true,
         "multi": true,

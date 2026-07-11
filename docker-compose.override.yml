@@ -16,6 +16,18 @@ services:
         --reload
         --reload-dir /home/appuser/src/app
 
+  datacollector:
+    volumes:
+      - ../StockTracker.DataCollector/app:/home/appuser/src/app:ro
+    environment:
+      LOG_JSON: "false"
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8001
+        --reload
+        --reload-dir /home/appuser/src/app
+
   postgres:
     ports:
       - "5432:5432"
@@ -23,3 +35,8 @@ services:
   redis:
     ports:
       - "6379:6379"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
