@@ -2,58 +2,39 @@ pipeline {
     agent any
 
     parameters {
-        string(
-            name: 'BRANCH',
-            defaultValue: 'main',
-            description: 'Git branch to build'
-        )
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['staging', 'production'],
-            description: 'Target deployment environment'
-        )
-        booleanParam(
-            name: 'SKIP_TESTS',
-            defaultValue: false,
-            description: 'Skip test stage (use cautiously)'
-        )
-        booleanParam(
-            name: 'DEPLOY',
-            defaultValue: true,
-            description: 'Deploy after successful build'
-        )
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Git branch to build')
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Target deployment environment')
+        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip lint/test stages (use cautiously)')
+        booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy after successful build')
     }
 
     environment {
-        // Docker Hub credentials (configured in Jenkins Credential Store)
         DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
-        DOCKER_API_REPO        = "${env.DOCKER_API_REPO ?: 'stocktracker-api'}"
-        DOCKER_REGISTRY    = "${env.DOCKER_REGISTRY ?: 'docker.io'}"
-
-        // Git
-        API_REPO_URL = "${env.API_REPO_URL ?: 'https://github.com/your-org/StockTracker.API.git'}"
-
-        // Build metadata
-        IMAGE_TAG    = "${params.BRANCH}-${env.BUILD_NUMBER}"
-        LATEST_TAG   = "${params.BRANCH == 'main' ? 'latest' : params.BRANCH}"
+        DOCKER_REGISTRY = "${env.DOCKER_REGISTRY ?: 'docker.io'}"
+        DOCKER_API_REPO = "${env.DOCKER_API_REPO ?: 'stocktracker-api'}"
+        DOCKER_DATACOLLECTOR_REPO = "${env.DOCKER_DATACOLLECTOR_REPO ?: 'stocktracker-datacollector'}"
+        API_REPO_URL = "${env.API_REPO_URL ?: 'https://github.com/trquoctoann/StockTracker.API.git'}"
+        DATACOLLECTOR_REPO_URL = "${env.DATACOLLECTOR_REPO_URL ?: 'https://github.com/trquoctoann/StockTracker.DataCollector.git'}"
+        IMAGE_TAG = "${params.BRANCH.replaceAll('[^A-Za-z0-9_.-]', '-')}-${env.BUILD_NUMBER}"
+        LATEST_TAG = "${params.BRANCH == 'main' ? 'latest' : params.BRANCH.replaceAll('[^A-Za-z0-9_.-]', '-')}"
     }
 
     options {
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '20'))
         timestamps()
     }
 
     stages {
-        // ── Stage 1: Checkout ───────────────────────────────
         stage('Checkout') {
             steps {
                 echo "==> Checking out branch: ${params.BRANCH}"
                 dir('StockTracker.API') {
-                    git branch: params.BRANCH,
-                        url: env.API_REPO_URL,
-                        credentialsId: 'git-credentials'
+                    git branch: params.BRANCH, url: env.API_REPO_URL, credentialsId: 'git-credentials'
+                }
+                dir('StockTracker.DataCollector') {
+                    git branch: params.BRANCH, url: env.DATACOLLECTOR_REPO_URL, credentialsId: 'git-credentials'
                 }
                 dir('StockTracker.Deployment') {
                     checkout scm
@@ -61,114 +42,187 @@ pipeline {
             }
         }
 
-        // ── Stage 2: Lint ───────────────────────────────────
         stage('Lint') {
-            when {
-                not { expression { params.SKIP_TESTS } }
-            }
-            steps {
-                echo '==> Running linter (ruff)...'
-                dir('StockTracker.API') {
-                    sh '''
-                        pip install --quiet ruff
-                        ruff check app/
-                        ruff format --check app/
-                    '''
+            when { not { expression { params.SKIP_TESTS } } }
+            parallel {
+                stage('API Lint') {
+                    steps {
+                        dir('StockTracker.API') {
+                            sh '''
+                                set -eux
+                                uv sync --frozen --extra dev
+                                uv run ruff check .
+                                uv run ruff format --check .
+                                uv run pyright
+                            '''
+                        }
+                    }
                 }
-            }
-        }
-
-        // ── Stage 3: Test ───────────────────────────────────
-        stage('Test') {
-            when {
-                not { expression { params.SKIP_TESTS } }
-            }
-            steps {
-                echo '==> Running tests (pytest)...'
-                dir('StockTracker.API') {
-                    sh '''
-                        pip install --quiet uv
-                        uv sync --frozen --dev
-                        uv run pytest tests/ \
-                            --tb=short \
-                            --junitxml=test-results.xml \
-                            -q
-                    '''
-                }
-            }
-            post {
-                always {
-                    dir('StockTracker.API') {
-                        junit allowEmptyResults: true,
-                              testResults: 'test-results.xml'
+                stage('DataCollector Lint') {
+                    steps {
+                        dir('StockTracker.DataCollector') {
+                            sh '''
+                                set -eux
+                                uv sync --frozen --dev
+                                uv run ruff check .
+                                uv run ruff format --check .
+                                uv run pyright
+                            '''
+                        }
                     }
                 }
             }
         }
 
-        // ── Stage 4: Build Docker Image ─────────────────────
-        stage('Build') {
-            steps {
-                echo "==> Building Docker image: ${DOCKER_API_REPO}:${IMAGE_TAG}"
-                dir('StockTracker.API') {
-                    sh """
-                        docker build \
-                            -f ../StockTracker.Deployment/services/api/Dockerfile \
-                            -t ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${IMAGE_TAG} \
-                            -t ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${LATEST_TAG} \
-                            --label "git.branch=${params.BRANCH}" \
-                            --label "git.commit=\$(git rev-parse --short HEAD)" \
-                            --label "build.number=${env.BUILD_NUMBER}" \
-                            --label "build.timestamp=\$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                            .
-                    """
+        stage('Test') {
+            when { not { expression { params.SKIP_TESTS } } }
+            parallel {
+                stage('API Test') {
+                    steps {
+                        dir('StockTracker.API') {
+                            sh 'uv run pytest tests/ --tb=short --junitxml=test-results.xml -q'
+                        }
+                    }
+                    post {
+                        always {
+                            dir('StockTracker.API') {
+                                junit allowEmptyResults: true, testResults: 'test-results.xml'
+                            }
+                        }
+                    }
+                }
+                stage('DataCollector Test') {
+                    steps {
+                        dir('StockTracker.DataCollector') {
+                            sh 'uv run pytest tests/ --tb=short --junitxml=test-results.xml -q'
+                        }
+                    }
+                    post {
+                        always {
+                            dir('StockTracker.DataCollector') {
+                                junit allowEmptyResults: true, testResults: 'test-results.xml'
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // ── Stage 5: Push to Registry ───────────────────────
-        stage('Push') {
-            steps {
-                echo "==> Pushing to ${DOCKER_REGISTRY}..."
-                sh """
-                    echo \$DOCKER_CREDENTIALS_PSW | docker login ${DOCKER_REGISTRY} \
-                        -u \$DOCKER_CREDENTIALS_USR --password-stdin
+        stage('Build Images') {
+            parallel {
+                stage('Build API') {
+                    steps {
+                        dir('StockTracker.API') {
+                            sh """
+                                set -eux
+                                docker build \\
+                                    -f ../StockTracker.Deployment/services/api/Dockerfile \\
+                                    -t ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${IMAGE_TAG} \\
+                                    -t ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${LATEST_TAG} \\
+                                    --label "org.opencontainers.image.source=${API_REPO_URL}" \\
+                                    --label "org.opencontainers.image.revision=\$(git rev-parse HEAD)" \\
+                                    --label "org.opencontainers.image.version=${IMAGE_TAG}" \\
+                                    --label "build.number=${env.BUILD_NUMBER}" \\
+                                    .
+                            """
+                        }
+                    }
+                }
+                stage('Build DataCollector') {
+                    steps {
+                        dir('StockTracker.DataCollector') {
+                            sh """
+                                set -eux
+                                docker build \\
+                                    -f ../StockTracker.Deployment/services/datacollector/Dockerfile \\
+                                    -t ${DOCKER_REGISTRY}/${DOCKER_DATACOLLECTOR_REPO}:${IMAGE_TAG} \\
+                                    -t ${DOCKER_REGISTRY}/${DOCKER_DATACOLLECTOR_REPO}:${LATEST_TAG} \\
+                                    --label "org.opencontainers.image.source=${DATACOLLECTOR_REPO_URL}" \\
+                                    --label "org.opencontainers.image.revision=\$(git rev-parse HEAD)" \\
+                                    --label "org.opencontainers.image.version=${IMAGE_TAG}" \\
+                                    --label "build.number=${env.BUILD_NUMBER}" \\
+                                    .
+                            """
+                        }
+                    }
+                }
+            }
+        }
 
+        stage('Push Images') {
+            steps {
+                sh """
+                    set -eux
+                    echo \$DOCKER_CREDENTIALS_PSW | docker login ${DOCKER_REGISTRY} -u \$DOCKER_CREDENTIALS_USR --password-stdin
                     docker push ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${IMAGE_TAG}
                     docker push ${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${LATEST_TAG}
-
+                    docker push ${DOCKER_REGISTRY}/${DOCKER_DATACOLLECTOR_REPO}:${IMAGE_TAG}
+                    docker push ${DOCKER_REGISTRY}/${DOCKER_DATACOLLECTOR_REPO}:${LATEST_TAG}
                     docker logout ${DOCKER_REGISTRY}
                 """
             }
         }
 
-        // ── Stage 6: Deploy ─────────────────────────────────
         stage('Deploy') {
-            when {
-                expression { params.DEPLOY }
-            }
+            when { expression { params.DEPLOY } }
             steps {
                 script {
                     if (params.ENVIRONMENT == 'staging') {
-                        echo '==> Deploying to staging (Docker Compose)...'
+                        echo '==> Deploying to staging with Docker Compose'
                         dir('StockTracker.Deployment') {
-                            sh """
-                                export API_APP_VERSION=${IMAGE_TAG}
-                                docker compose pull api 2>/dev/null || true
-                                docker compose up -d api --force-recreate --no-deps
-                            """
+                            withCredentials([file(credentialsId: 'stocktracker-staging-env', variable: 'DEPLOY_ENV_FILE')]) {
+                                withEnv([
+                                    "API_APP_VERSION=${IMAGE_TAG}",
+                                    "DATACOLLECTOR_APP_VERSION=${IMAGE_TAG}"
+                                ]) {
+                                    sh '''
+                                        set -eu
+
+                                        compose() {
+                                            docker compose --env-file "$DEPLOY_ENV_FILE" -f docker-compose.yml "$@"
+                                        }
+
+                                        api_container="$(compose ps -q api 2>/dev/null || true)"
+                                        collector_container="$(compose ps -q datacollector 2>/dev/null || true)"
+                                        previous_api_id="$(test -n "$api_container" && docker inspect --format '{{.Image}}' "$api_container" || true)"
+                                        previous_collector_id="$(test -n "$collector_container" && docker inspect --format '{{.Image}}' "$collector_container" || true)"
+
+                                        rollback() {
+                                            exit_code=$?
+                                            if [ "$exit_code" -ne 0 ]; then
+                                                echo "==> Deployment failed; attempting application image rollback"
+                                                if [ -n "$previous_api_id" ]; then
+                                                    docker tag "$previous_api_id" "$DOCKER_REGISTRY/$DOCKER_API_REPO:$API_APP_VERSION"
+                                                fi
+                                                if [ -n "$previous_collector_id" ]; then
+                                                    docker tag "$previous_collector_id" "$DOCKER_REGISTRY/$DOCKER_DATACOLLECTOR_REPO:$DATACOLLECTOR_APP_VERSION"
+                                                fi
+                                                compose up -d --no-build --force-recreate api api-worker datacollector || true
+                                            fi
+                                            exit "$exit_code"
+                                        }
+                                        trap rollback EXIT
+
+                                        compose pull api api-worker datacollector
+                                        compose up -d --wait --wait-timeout 240 \
+                                            postgres redis rabbitmq keycloak loki prometheus \
+                                            postgres-exporter redis-exporter alloy grafana
+                                        compose run --rm --no-deps api alembic upgrade head
+                                        compose up -d --no-build --force-recreate --wait --wait-timeout 180 \
+                                            api api-worker datacollector
+                                        compose exec -T api python -c \
+                                            "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+                                        compose exec -T datacollector python -c \
+                                            "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"
+                                        compose ps
+
+                                        trap - EXIT
+                                    '''
+                                }
+                            }
                         }
                     } else if (params.ENVIRONMENT == 'production') {
-                        echo '==> Deploying to production (Kubernetes)...'
-                        // Future K8s deployment:
-                        // sh """
-                        //     kubectl set image deployment/stocktracker-api \
-                        //         api=${DOCKER_REGISTRY}/${DOCKER_API_REPO}:${IMAGE_TAG} \
-                        //         -n stocktracker
-                        //     kubectl rollout status deployment/stocktracker-api \
-                        //         -n stocktracker --timeout=300s
-                        // """
-                        echo 'K8s deployment not yet configured. Skipping.'
+                        error('Production deployment is not configured yet. Add Kubernetes/remote Compose rollout before enabling production.')
                     }
                 }
             }
@@ -177,22 +231,12 @@ pipeline {
 
     post {
         success {
-            echo "==> Pipeline SUCCESS: ${DOCKER_API_REPO}:${IMAGE_TAG}"
-            // Uncomment to enable Slack notifications:
-            // slackSend(
-            //     color: 'good',
-            //     message: "✅ StockTracker API build #${env.BUILD_NUMBER} succeeded\nBranch: ${params.BRANCH}\nImage: ${DOCKER_API_REPO}:${IMAGE_TAG}"
-            // )
+            echo "==> Pipeline SUCCESS: API/DataCollector ${IMAGE_TAG}"
         }
         failure {
-            echo "==> Pipeline FAILED: ${DOCKER_API_REPO}:${IMAGE_TAG}"
-            // slackSend(
-            //     color: 'danger',
-            //     message: "❌ StockTracker API build #${env.BUILD_NUMBER} failed\nBranch: ${params.BRANCH}"
-            // )
+            echo "==> Pipeline FAILED: API/DataCollector ${IMAGE_TAG}"
         }
         cleanup {
-            // Clean up dangling images to save disk space
             sh 'docker image prune -f --filter "until=24h" || true'
         }
     }
