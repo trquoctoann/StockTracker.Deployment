@@ -93,7 +93,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-keycloak
     restart: unless-stopped
     command: start --import-realm
-    environment: &api-environment
+    environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_DB: ${KC_DB}
@@ -130,7 +130,7 @@ services:
     image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_API_REPO:-stocktracker-api}:${API_APP_VERSION:-latest}
     container_name: ${COMPOSE_PROJECT_NAME}-api
     restart: unless-stopped
-    environment:
+    environment: &api-environment
       APP_NAME: ${API_APP_NAME}
       APP_VERSION: ${API_APP_VERSION}
       DEBUG: ${API_DEBUG}
@@ -218,6 +218,15 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    # The shared API image probes an HTTP server that this worker does not run.
+    # Probe the dependencies from the worker container so `compose --wait` can
+    # distinguish a ready consumer process from one with broken connectivity.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; endpoints=(('postgres', 5432), ('redis', 6379), ('rabbitmq', 5672)); [socket.create_connection(endpoint, 2).close() for endpoint in endpoints]"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -365,7 +374,9 @@ services:
       - ./config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki_data:/loki
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --output-document=- http://localhost:3100/ready | grep -q ready || exit 1"]
+      # Loki's production image is distroless, so CMD-SHELL/wget are unavailable.
+      # HTTP readiness is covered by the deployment smoke test.
+      test: ["CMD", "/usr/bin/loki", "-config.file=/etc/loki/loki-config.yml", "-verify-config"]
       interval: 15s
       timeout: 5s
       retries: 5
