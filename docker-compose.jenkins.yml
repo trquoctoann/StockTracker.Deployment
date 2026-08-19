@@ -54,7 +54,7 @@ services:
       - jenkins_home:/var/jenkins_home
       - jenkins_docker_data:/var/lib/docker
     healthcheck:
-      test: ["CMD", "docker", "info"]
+      test: ["CMD", "docker", "--host=tcp://localhost:2375", "info"]
       interval: 10s
       timeout: 5s
       retries: 10

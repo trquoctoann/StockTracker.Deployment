@@ -1,7 +1,14 @@
+# Runtime configuration
 configuration-as-code
-credentials-binding
-docker-workflow
-git
-junit
-pipeline-stage-view
+
+# Pipeline and test reporting
 workflow-aggregator
+pipeline-stage-view
+junit
+timestamper
+
+# Source, registry and secret credentials
+git
+docker-workflow
+credentials-binding
+plain-credentials
