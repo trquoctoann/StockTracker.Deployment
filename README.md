@@ -2,7 +2,7 @@
 
 ## Local lab
 
-1. Sao chép `.env.example` thành `.env` và thay toàn bộ giá trị `CHANGE_ME_*`. Hai client secret phải khớp với realm import cho lần khởi tạo lab đầu tiên.
+1. Sao chép `.env.example` thành `.env` và thay toàn bộ giá trị `CHANGE_ME_*`. Hai client secret phải khớp với realm import cho lần khởi tạo lab đầu tiên. PostgreSQL/Keycloak credentials chỉ được áp dụng khi volume khởi tạo lần đầu; đổi `.env` không tự đổi password trong volume cũ.
 2. Chạy `docker compose -f docker-compose.yml config` để kiểm tra cấu hình.
 3. Chạy migration: `docker compose -f docker-compose.yml run --rm api alembic upgrade head`.
 4. Khởi động stack: `docker compose -f docker-compose.yml up -d --wait`.
@@ -18,6 +18,10 @@ API chạy HTTP riêng; `api-worker` nhận RabbitMQ message. Grafana có Loki v
 Khởi động logical backup bằng profile: `docker compose -f docker-compose.yml --profile backup up -d postgres-backup`. Mỗi file được `pg_restore --list` xác minh và giữ theo `POSTGRES_BACKUP_RETENTION_DAYS`. Restore là thao tác phá hủy; chạy `scripts/postgres/restore.sh` trong container PostgreSQL phù hợp và đặt `RESTORE_CONFIRM` bằng đúng tên database.
 
 Logical dump không thay thế PITR. Production cần WAL archive/object storage, mã hóa, cảnh báo backup trễ và restore drill định kỳ.
+
+## Container verification
+
+Ngày 30/08/2026, stack sạch đã build hai application image, chạy 16 Alembic migrations trên PostgreSQL 17, đạt health cho toàn bộ Compose services, xác minh sáu Prometheus targets, Alloy → Loki, M2M Keycloak, poison message → DLQ và listing pipeline hai lần không sinh composition trùng. Logical dump đã restore vào database tạm với số bản ghi khớp. Jenkins image/JCasC/plugin đã bootstrap sạch; Jenkinsfile được parser thật xác nhận và controller non-root đã build/run image qua Docker-in-Docker.
 
 ## Production boundaries
 

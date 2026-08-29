@@ -6,7 +6,7 @@ Ngày kiểm tra ban đầu: **27/08/2026**. Cập nhật khắc phục: **29/08
 
 Các lỗi có thể sửa và kiểm thử trong repository đã được xử lý: sync catalog chạy qua domain service; composition/industry links được reconcile; service token kiểm tra issuer/audience/role; transaction lồng chỉ điều khiển savepoint; consumer có retry hữu hạn, DLQ và tiến trình worker riêng; news/events giữ lịch sử; intraday bắt buộc source ID; `/run/*` dùng Keycloak introspection, background job và khóa pipeline; Jenkins dùng JCasC + Docker daemon cô lập; staging chỉ dùng compose base, chờ health, migration rồi smoke/rollback; Prometheus/exporters/alerts/dashboard, Loki retention và logical backup đã được thêm.
 
-Các giới hạn còn lại cần hạ tầng thật để hoàn tất: TLS/hostname và secret manager cho production; object storage cho Loki; PITR/WAL archive và restore drill trên môi trường riêng; distributed job state/lock khi chạy nhiều collector replica; raw archive/watermark; load test và kiểm thử container vì Docker daemon không khả dụng trong phiên này.
+Các giới hạn còn lại cần hạ tầng thật để hoàn tất: TLS/hostname và secret manager cho production; object storage cho Loki; PITR/WAL archive và restore drill trên môi trường riêng; distributed job state/lock khi chạy nhiều collector replica; raw archive/watermark và load test. Container E2E, logical dump/restore và Jenkins lab đã được chạy trên Docker Desktop sau lần rà soát ban đầu.
 
 ## 1. Kết luận
 
@@ -109,11 +109,11 @@ Nguồn phạm vi thi: [SAA](https://aws.amazon.com/certification/certified-solu
 
 ## 5. Kết quả kiểm tra và giới hạn
 
-- Collector baseline trước sửa: **63 passed**. Sau sửa: **126 passed**, Ruff lint/format đạt và Pyright 0 errors; contract test vnstock 4 được chạy, không skip.
+- Collector baseline trước sửa: **63 passed**. Sau sửa: **128 passed**, Ruff lint/format đạt và Pyright 0 errors; contract test vnstock 4 được chạy, không skip.
 - API sau sửa: **321 passed**, Ruff lint/format đạt và Pyright 0 errors. Các test service authorization đã được chuyển sang role `data_ingest`; test transaction, consumer/DLQ, sync quan hệ, health và metrics đều đạt.
-- 16 file migration parse được bằng Python và Alembic chỉ có một head; chưa chạy upgrade trên PostgreSQL thật nên chưa chứng minh schema vận hành đúng.
-- Docker Compose base validate được với `.env.example`; Docker Desktop Linux daemon không có pipe hoạt động. Chưa build image, chạy Jenkins, restore database hay test E2E qua broker thật.
-- Source smoke thực tế trên FPT thành công ở 9 nhóm qua collector; kiểm tra riêng VN30 trả 30 thành phần; events KBS trả rỗng. Không khẳng định mọi mã, mọi index group, mọi ngày hoặc nguồn dự phòng đều hoạt động.
+- 16 migration parse được bằng Python, Alembic chỉ có một head và toàn bộ migration đã upgrade thành công trên PostgreSQL 17 trong stack sạch.
+- Docker Compose base và Jenkins đã build/chạy trên Docker Desktop. Stack sạch đạt health; sáu Prometheus targets `up`; M2M authorization, DLQ, Alloy → Loki, logical dump/restore và Jenkins Docker-in-Docker đều được xác minh.
+- Listing pipeline thực tế chạy hai lần và giữ nguyên 177 industries, 1.545 stocks, 9 indices, 1.334 compositions, không có composition trùng. Capability discovery loại các metadata index mà KBS không cung cấp membership. Events KBS FPT trả rỗng; không khẳng định mọi mã, mọi ngày hoặc source dự phòng đều hoạt động.
 - Chưa có benchmark CPU/RAM, latency, throughput, recovery time hay ước tính chi phí AWS dựa trên workload đo được. Chỉ bật cloud sau khi đặt ngân sách và chọn quy mô lab.
 
-**Việc nên làm tiếp theo:** chạy migration và integration test trên PostgreSQL/RabbitMQ thật, diễn tập backup/restore và Jenkins staging, sau đó bổ sung raw archive/watermark cùng distributed lock trước khi scale collector. Terraform hay EKS chỉ nên bắt đầu sau khi các kiểm tra vận hành này có thể lặp lại ổn định.
+**Việc nên làm tiếp theo:** tự động hóa container E2E trong CI, bổ sung raw archive/watermark và distributed lock trước khi scale collector, rồi đo tải để chốt sizing/cost. Terraform hay EKS chỉ nên bắt đầu sau khi các kiểm tra vận hành này có thể lặp lại ổn định.
