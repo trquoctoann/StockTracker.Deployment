@@ -42,7 +42,6 @@ docker compose --env-file .env.example -f docker-compose.yml config --quiet
 - [Data foundation](docs/data-foundation.md)
 - [Operations, CI/CD, backup, and recovery](docs/operations.md)
 - [Certification implementation roadmap](docs/certification-roadmap.md)
-- [Documentation maintenance policy](docs/README.md)
-- [Contribution rules](CONTRIBUTING.md)
+- [Contribution and documentation rules](CONTRIBUTING.md)
 
 This Compose platform is a learning and single-host staging environment. Production requires cloud or cluster infrastructure, TLS, managed secrets, managed storage, PITR, immutable signed images, and measured capacity.
