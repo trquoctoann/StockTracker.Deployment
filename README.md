@@ -4,10 +4,14 @@
 
 1. Sao chép `.env.example` thành `.env` và thay toàn bộ giá trị `CHANGE_ME_*`. Hai client secret phải khớp với realm import cho lần khởi tạo lab đầu tiên. PostgreSQL/Keycloak credentials chỉ được áp dụng khi volume khởi tạo lần đầu; đổi `.env` không tự đổi password trong volume cũ.
 2. Chạy `docker compose -f docker-compose.yml config` để kiểm tra cấu hình.
-3. Chạy migration: `docker compose -f docker-compose.yml run --rm api alembic upgrade head`.
+3. Chạy migration cho cả hai schema:
+   `docker compose -f docker-compose.yml run --rm api alembic upgrade head` và
+   `docker compose -f docker-compose.yml run --rm datacollector alembic upgrade head`.
 4. Khởi động stack: `docker compose -f docker-compose.yml up -d --wait`.
 
-API chạy HTTP riêng; `api-worker` nhận RabbitMQ message. Grafana có Loki và Prometheus được provision sẵn. Các cổng chỉ bind vào loopback.
+API chạy HTTP riêng; `api-worker` nhận RabbitMQ message qua retry queue có delay rồi chuyển message hết retry sang DLQ. DataCollector lưu trạng thái pipeline trong PostgreSQL và raw response trong S3Mock. Grafana có Loki và Prometheus được provision sẵn; Alertmanager hiển thị cảnh báo tại `http://localhost:9093`. Các cổng chỉ bind vào loopback.
+
+Chi tiết control plane, replay và cách kiểm tra nằm trong [data foundation](docs/data-foundation.vi.md).
 
 ## Jenkins lab
 

@@ -15,6 +15,8 @@ COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY --chown=appuser:appuser app/ ./app/
+COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser alembic.ini ./
 
 # Stage 2: Runtime
 FROM python:3.12-slim AS runtime
@@ -26,6 +28,8 @@ WORKDIR /home/appuser/src
 
 COPY --from=builder --chown=appuser:appuser /home/appuser/src/.venv /home/appuser/src/.venv
 COPY --from=builder --chown=appuser:appuser /home/appuser/src/app ./app
+COPY --from=builder --chown=appuser:appuser /home/appuser/src/alembic ./alembic
+COPY --from=builder --chown=appuser:appuser /home/appuser/src/alembic.ini ./
 
 ENV PATH="/home/appuser/src/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

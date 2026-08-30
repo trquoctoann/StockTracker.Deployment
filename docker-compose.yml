@@ -176,6 +176,7 @@ services:
       RABBITMQ_PREFETCH_COUNT: ${API_RABBITMQ_PREFETCH_COUNT}
       RABBITMQ_RECONNECT_DELAY_SECONDS: ${API_RABBITMQ_RECONNECT_DELAY_SECONDS}
       RABBITMQ_MAX_RETRIES: ${API_RABBITMQ_MAX_RETRIES:-3}
+      RABBITMQ_RETRY_DELAY_MS: ${API_RABBITMQ_RETRY_DELAY_MS:-30000}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -233,6 +234,8 @@ services:
           memory: 512M
     networks:
       - backend
+    labels:
+      logging: "true"
 
   postgres-backup:
     image: postgres:17-alpine
@@ -259,6 +262,31 @@ services:
     labels:
       logging: "true"
 
+  s3mock:
+    image: adobe/s3mock:5.1.0
+    container_name: ${COMPOSE_PROJECT_NAME}-s3mock
+    restart: unless-stopped
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${RAW_ARCHIVE_BUCKET:-stocktracker-raw}
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "127.0.0.1:9092:9090"
+    volumes:
+      - s3mock_data:/s3mockroot
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/favicon.ico"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - backend
+
   datacollector:
     build:
       context: ../StockTracker.DataCollector
@@ -278,10 +306,22 @@ services:
       RABBITMQ_URL: ${DATACOLLECTOR_RABBITMQ_URL}
       RABBITMQ_EXCHANGE: ${DATACOLLECTOR_RABBITMQ_EXCHANGE}
       RABBITMQ_EXCHANGE_TYPE: ${DATACOLLECTOR_RABBITMQ_EXCHANGE_TYPE}
+      CONTROL_PLANE_ENABLED: ${DATACOLLECTOR_CONTROL_PLANE_ENABLED:-true}
+      CONTROL_DATABASE_URL: ${DATACOLLECTOR_CONTROL_DATABASE_URL:-${API_DATABASE_URL}}
+      PIPELINE_HEARTBEAT_SECONDS: ${DATACOLLECTOR_PIPELINE_HEARTBEAT_SECONDS:-30}
+      PIPELINE_STALE_AFTER_SECONDS: ${DATACOLLECTOR_PIPELINE_STALE_AFTER_SECONDS:-300}
+      RAW_ARCHIVE_ENABLED: ${DATACOLLECTOR_RAW_ARCHIVE_ENABLED:-true}
+      RAW_ARCHIVE_ENDPOINT_URL: ${DATACOLLECTOR_RAW_ARCHIVE_ENDPOINT_URL:-http://s3mock:9090}
+      RAW_ARCHIVE_ACCESS_KEY: ${DATACOLLECTOR_RAW_ARCHIVE_ACCESS_KEY:-local}
+      RAW_ARCHIVE_SECRET_KEY: ${DATACOLLECTOR_RAW_ARCHIVE_SECRET_KEY:-local-secret}
+      RAW_ARCHIVE_REGION: ${DATACOLLECTOR_RAW_ARCHIVE_REGION:-us-east-1}
+      RAW_ARCHIVE_BUCKET: ${RAW_ARCHIVE_BUCKET:-stocktracker-raw}
+      RAW_ARCHIVE_PREFIX: ${DATACOLLECTOR_RAW_ARCHIVE_PREFIX:-raw}
+      RAW_ARCHIVE_SCHEMA_VERSION: ${DATACOLLECTOR_RAW_ARCHIVE_SCHEMA_VERSION:-1}
       SCHEDULER_ENABLED: ${DATACOLLECTOR_SCHEDULER_ENABLED}
       SCHEDULER_TIMEZONE: ${DATACOLLECTOR_SCHEDULER_TIMEZONE:-Asia/Ho_Chi_Minh}
       VNSTOCK_LISTING_SOURCE: ${DATACOLLECTOR_VNSTOCK_LISTING_SOURCE:-KBS}
-      VNSTOCK_INDICES_SOURCE: ${DATACOLLECTOR_VNSTOCK_INDICES_SOURCE:-VCI}
+      VNSTOCK_INDICES_SOURCE: ${DATACOLLECTOR_VNSTOCK_INDICES_SOURCE:-KBS}
       VNSTOCK_COMPANY_SOURCE: ${DATACOLLECTOR_VNSTOCK_COMPANY_SOURCE:-KBS}
       VNSTOCK_QUOTE_SOURCE: ${DATACOLLECTOR_VNSTOCK_QUOTE_SOURCE:-KBS}
       VNSTOCK_HISTORY_LOOKBACK_DAYS: ${DATACOLLECTOR_VNSTOCK_HISTORY_LOOKBACK_DAYS:-30}
@@ -296,6 +336,10 @@ services:
       api:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      s3mock:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')"]
@@ -353,6 +397,9 @@ services:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./config/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
+    depends_on:
+      alertmanager:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/ready"]
       interval: 15s
@@ -361,6 +408,31 @@ services:
       start_period: 20s
     networks:
       - backend
+      - monitoring
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    container_name: ${COMPOSE_PROJECT_NAME}-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
       - monitoring
 
   loki:
@@ -469,5 +541,9 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}-grafana-data
   prometheus_data:
     name: ${COMPOSE_PROJECT_NAME}-prometheus-data
+  alertmanager_data:
+    name: ${COMPOSE_PROJECT_NAME}-alertmanager-data
   postgres_backups:
     name: ${COMPOSE_PROJECT_NAME}-postgres-backups
+  s3mock_data:
+    name: ${COMPOSE_PROJECT_NAME}-s3mock-data

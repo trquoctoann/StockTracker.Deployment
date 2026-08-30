@@ -1,0 +1,14 @@
+route:
+  receiver: stocktracker-local
+  group_by: [alertname, severity, job, pipeline]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: stocktracker-local
+
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [alertname, job, pipeline]
