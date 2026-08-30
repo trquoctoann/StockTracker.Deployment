@@ -149,6 +149,20 @@ pipeline {
             }
         }
 
+        stage('Data Foundation E2E') {
+            steps {
+                dir('StockTracker.Deployment') {
+                    withEnv([
+                        "COMPOSE_PROJECT_NAME=stocktracker-data-foundation-${env.BUILD_NUMBER}",
+                        "API_APP_VERSION=${IMAGE_TAG}",
+                        "DATACOLLECTOR_APP_VERSION=${IMAGE_TAG}"
+                    ]) {
+                        sh 'sh scripts/smoke-data-foundation.sh'
+                    }
+                }
+            }
+        }
+
         stage('Push Images') {
             steps {
                 sh """
@@ -205,9 +219,10 @@ pipeline {
 
                                         compose pull api api-worker datacollector
                                         compose up -d --wait --wait-timeout 240 \
-                                            postgres redis rabbitmq keycloak loki prometheus \
+                                            postgres redis rabbitmq keycloak s3mock loki alertmanager prometheus \
                                             postgres-exporter redis-exporter alloy grafana
                                         compose run --rm --no-deps api alembic upgrade head
+                                        compose run --rm --no-deps datacollector alembic upgrade head
                                         compose up -d --no-build --force-recreate --wait --wait-timeout 180 \
                                             api api-worker datacollector
                                         compose exec -T api python -c \

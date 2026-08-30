@@ -1,0 +1,13 @@
+services:
+  postgres:
+    ports: !reset []
+  s3mock:
+    ports: !reset []
+  alertmanager:
+    ports: !reset []
+  prometheus:
+    ports: !reset []
+  datacollector:
+    ports: !reset []
+    volumes:
+      - ./tests/e2e/smoke_data_foundation.py:/tmp/smoke-data-foundation.py:ro
