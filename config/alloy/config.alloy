@@ -1,12 +1,12 @@
 // Alloy discovers all Docker containers and forwards their logs
 // to Loki with proper labels for filtering in Grafana.
 
-// ── Step 1: Discover Docker containers ──────────────────────
+// Step 1: Discover Docker containers
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
 
-// ── Step 2: Relabel — extract useful metadata ───────────────
+// Step 2: Relabel and extract useful metadata
 discovery.relabel "docker_labels" {
   targets = discovery.docker.containers.targets
 
@@ -37,14 +37,14 @@ discovery.relabel "docker_labels" {
   }
 }
 
-// ── Step 3: Collect Docker logs ─────────────────────────────
+// Step 3: Collect Docker logs
 loki.source.docker "default" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.docker_labels.output
   forward_to = [loki.process.pipeline.receiver]
 }
 
-// ── Step 4: Process — add labels and parse ──────────────────
+// Step 4: Add labels and parse log content
 loki.process "pipeline" {
   forward_to = [loki.write.loki.receiver]
 
@@ -73,7 +73,7 @@ loki.process "pipeline" {
   }
 }
 
-// ── Step 5: Forward to Loki ─────────────────────────────────
+// Step 5: Forward to Loki
 loki.write "loki" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"

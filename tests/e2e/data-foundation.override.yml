@@ -1,6 +1,14 @@
 services:
   postgres:
     ports: !reset []
+  redis:
+    ports: !reset []
+  rabbitmq:
+    ports: !reset []
+  keycloak:
+    ports: !reset []
+  api:
+    ports: !reset []
   s3mock:
     ports: !reset []
   alertmanager:

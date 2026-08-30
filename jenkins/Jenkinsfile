@@ -54,6 +54,9 @@ pipeline {
                                 uv run ruff check .
                                 uv run ruff format --check .
                                 uv run pyright
+                                uv run python scripts/check_english_content.py
+                                uvx --python .venv/bin/python pip-audit \
+                                    --path .venv/lib/python3.12/site-packages --skip-editable
                             '''
                         }
                     }
@@ -67,6 +70,20 @@ pipeline {
                                 uv run ruff check .
                                 uv run ruff format --check .
                                 uv run pyright
+                                uv run python scripts/check_english_content.py
+                                uvx --python .venv/bin/python pip-audit \
+                                    --path .venv/lib/python3.12/site-packages --skip-editable
+                            '''
+                        }
+                    }
+                }
+                stage('Deployment Lint') {
+                    steps {
+                        dir('StockTracker.Deployment') {
+                            sh '''
+                                set -eux
+                                python3 scripts/check_english_content.py
+                                docker compose --env-file .env.example -f docker-compose.yml config --quiet
                             '''
                         }
                     }
@@ -221,8 +238,8 @@ pipeline {
                                         compose up -d --wait --wait-timeout 240 \
                                             postgres redis rabbitmq keycloak s3mock loki alertmanager prometheus \
                                             postgres-exporter redis-exporter alloy grafana
-                                        compose run --rm --no-deps api alembic upgrade head
                                         compose run --rm --no-deps datacollector alembic upgrade head
+                                        compose run --rm --no-deps api alembic upgrade head
                                         compose up -d --no-build --force-recreate --wait --wait-timeout 180 \
                                             api api-worker datacollector
                                         compose exec -T api python -c \

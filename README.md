@@ -1,32 +1,48 @@
 # StockTracker Deployment
 
-## Local lab
+This repository defines the local and single-host staging platform for StockTracker. It includes Docker Compose, Jenkins, PostgreSQL, Redis, RabbitMQ, Keycloak, S3Mock, Prometheus, Alertmanager, Grafana, Loki, Alloy, exporters, migrations, backup scripts, and isolated end-to-end verification.
 
-1. Sao chép `.env.example` thành `.env` và thay toàn bộ giá trị `CHANGE_ME_*`. Hai client secret phải khớp với realm import cho lần khởi tạo lab đầu tiên. PostgreSQL/Keycloak credentials chỉ được áp dụng khi volume khởi tạo lần đầu; đổi `.env` không tự đổi password trong volume cũ.
-2. Chạy `docker compose -f docker-compose.yml config` để kiểm tra cấu hình.
-3. Chạy migration cho cả hai schema:
-   `docker compose -f docker-compose.yml run --rm api alembic upgrade head` và
-   `docker compose -f docker-compose.yml run --rm datacollector alembic upgrade head`.
-4. Khởi động stack: `docker compose -f docker-compose.yml up -d --wait`.
+## Start the local lab
 
-API chạy HTTP riêng; `api-worker` nhận RabbitMQ message qua retry queue có delay rồi chuyển message hết retry sang DLQ. DataCollector lưu trạng thái pipeline trong PostgreSQL và raw response trong S3Mock. Grafana có Loki và Prometheus được provision sẵn; Alertmanager hiển thị cảnh báo tại `http://localhost:9093`. Các cổng chỉ bind vào loopback.
+1. Copy `.env.example` to `.env` and replace every `CHANGE_ME_*` value. Keycloak client secrets must match the realm import during the first volume initialization.
+2. Validate configuration with `docker compose -f docker-compose.yml config --quiet`.
+3. Run collector migrations first, then API migrations:
 
-Chi tiết control plane, replay và cách kiểm tra nằm trong [data foundation](docs/data-foundation.vi.md).
+   ```bash
+   docker compose -f docker-compose.yml run --rm datacollector alembic upgrade head
+   docker compose -f docker-compose.yml run --rm api alembic upgrade head
+   ```
 
-## Jenkins lab
+4. Start and wait for the stack:
 
-`docker compose -f docker-compose.jenkins.yml up -d --build` tạo Jenkins non-root bằng JCasC và một Docker-in-Docker daemon riêng. Tạo các Jenkins credentials: `git-credentials`, `dockerhub-credentials` và secret file `stocktracker-staging-env`. Staging deploy dùng image tag `<branch>-<build number>` và không nạp `docker-compose.override.yml`.
+   ```bash
+   docker compose -f docker-compose.yml up -d --wait --wait-timeout 240
+   ```
 
-## Backup
+5. Open Grafana at `http://localhost:3001`, Prometheus at `http://localhost:9091`, and Alertmanager at `http://localhost:9093`. Published ports bind to loopback only.
 
-Khởi động logical backup bằng profile: `docker compose -f docker-compose.yml --profile backup up -d postgres-backup`. Mỗi file được `pg_restore --list` xác minh và giữ theo `POSTGRES_BACKUP_RETENTION_DAYS`. Restore là thao tác phá hủy; chạy `scripts/postgres/restore.sh` trong container PostgreSQL phù hợp và đặt `RESTORE_CONFIRM` bằng đúng tên database.
+## Verify the data foundation
 
-Logical dump không thay thế PITR. Production cần WAL archive/object storage, mã hóa, cảnh báo backup trễ và restore drill định kỳ.
+The E2E script creates an isolated Compose project, runs both migration chains, starts API, worker, collector, and monitoring services, validates readiness, checks advisory locking, raw archive replay, watermarks, and Prometheus or Alertmanager configuration, then removes its containers and volumes.
 
-## Container verification
+```bash
+sh scripts/smoke-data-foundation.sh
+```
 
-Ngày 30/08/2026, stack sạch đã build hai application image, chạy 16 Alembic migrations trên PostgreSQL 17, đạt health cho toàn bộ Compose services, xác minh sáu Prometheus targets, Alloy → Loki, M2M Keycloak, poison message → DLQ và listing pipeline hai lần không sinh composition trùng. Logical dump đã restore vào database tạm với số bản ghi khớp. Jenkins image/JCasC/plugin đã bootstrap sạch; Jenkinsfile được parser thật xác nhận và controller non-root đã build/run image qua Docker-in-Docker.
+Before committing a deployment change, also validate the English-only policy and resolved Compose model:
 
-## Production boundaries
+```bash
+python3 scripts/check_english_content.py
+docker compose --env-file .env.example -f docker-compose.yml config --quiet
+```
 
-Compose này phục vụ học tập và staging một host. Production cần TLS ingress, secret manager, Keycloak hostname cố định, backup ngoài host, object storage cho Loki, image digest/signing và distributed scheduler/lock nếu scale DataCollector.
+## Documentation
+
+- [Platform architecture and review](docs/architecture.md)
+- [Data foundation](docs/data-foundation.md)
+- [Operations, CI/CD, backup, and recovery](docs/operations.md)
+- [Certification implementation roadmap](docs/certification-roadmap.md)
+- [Documentation maintenance policy](docs/README.md)
+- [Contribution rules](CONTRIBUTING.md)
+
+This Compose platform is a learning and single-host staging environment. Production requires cloud or cluster infrastructure, TLS, managed secrets, managed storage, PITR, immutable signed images, and measured capacity.
