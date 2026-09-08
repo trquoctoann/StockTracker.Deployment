@@ -1,68 +1,119 @@
-# StockTracker platform architecture
+# System architecture and deployment flow
 
-Last reviewed: 2026-08-30.
+Reviewed 2026-09-05 from the three checked-out repositories. This is the implemented local Compose platform, not a production readiness certification.
 
-## Current design
+## Ownership and topology
+
+| Repository | Owns | Does not own |
+| --- | --- | --- |
+| API | Canonical entities/tables, REST contract, application roles/permissions, consumers, API Alembic history | Provider extraction, infrastructure manifests |
+| DataCollector | SDK adapter, transformations, transport payloads, run/checkpoint/watermark state, raw archive, collector migrations | Canonical stock table writes |
+| Deployment | Dockerfiles, Compose/environment translation, Keycloak import, monitoring, backup scripts, CI | Application business logic or migration definitions |
 
 ```mermaid
 flowchart LR
-    Sources[KBS and VCI through vnstock] --> Collector[DataCollector]
-    Collector --> Raw[(S3 or S3Mock)]
-    Collector -->|catalog and company HTTP| API[StockTracker API]
-    Collector -->|market data AMQP| RabbitMQ[(RabbitMQ)]
-    RabbitMQ --> Worker[API consumer worker]
-    API --> PostgreSQL[(PostgreSQL)]
-    Worker --> PostgreSQL
-    Collector --> PostgreSQL
-    API --> Redis[(Redis)]
-    API --> Keycloak[Keycloak]
-    Collector --> Keycloak
-    Services[Application containers] --> Alloy[Alloy]
-    Alloy --> Loki[(Loki)]
-    Services --> Prometheus[Prometheus]
-    Exporters[Database and broker exporters] --> Prometheus
-    Prometheus --> Grafana[Grafana]
-    Loki --> Grafana
-    Prometheus --> Alertmanager[Alertmanager]
+    Provider[vnstock KBS and VCI] --> Collector[DataCollector]
+    Operator[Pipeline operator] -->|introspected token| Collector
+    KC[Keycloak] -->|M2M identity| Collector
+    Collector -->|catalog and company HTTP| API[API HTTP]
+    Collector -->|candles and trades| MQ[RabbitMQ]
+    MQ --> Worker[API worker]
+    Worker --> PG[(Application PostgreSQL)]
+    API --> PG
+    API --> Redis[(Redis cache)]
+    Worker --> Redis
+    Collector --> Control[(collector schema)]
+    Collector --> S3[S3Mock raw archive]
+    User[Application user] -->|identity or context token| API
+    API --> KC
 ```
 
-The API remains a modular monolith. The collector and consumer worker are separate processes because they have different scaling, scheduling, failure, and connection-pool behavior. Market data does not pass through an HTTP API call; the collector publishes it to RabbitMQ and the worker persists it.
+The same PostgreSQL instance hosts application tables, collector operational state, and a separate Keycloak database. API and collector migration histories are independent even when sharing the application database. Default schema version table belongs to API; collector.alembic_version belongs to collector.
 
-## Implemented foundation
+## Services, networks, storage
 
-- PostgreSQL persistence with separate API and collector Alembic version tables.
-- Redis cache and authorization version invalidation with a circuit breaker.
-- Keycloak machine-to-machine authentication and scoped ingestion roles.
-- Short-lived context tokens with issuer, audience, expiration, and minimum HMAC key validation.
-- Dedicated RabbitMQ worker, persistent messages, publisher confirms, delayed bounded retries, and dead-letter queues.
-- Durable collector runs, steps, heartbeats, advisory locks, watermarks, resume, and raw object manifests.
-- Immutable gzip raw archive in S3-compatible storage with SHA-256 replay verification.
-- Liveness and dependency-aware readiness for both applications.
-- Structured JSON logs, correlation IDs, Prometheus metrics, exporters, Grafana dashboards, Loki retention, and Alertmanager rules.
-- Multi-stage non-root application images and an isolated E2E Compose project.
-- Jenkins Configuration as Code, a separate Docker-in-Docker daemon, frozen dependency installs, static checks, dependency audit, tests, image builds, E2E, immutable build tags, staging migrations, smoke checks, and rollback.
-- Scheduled logical PostgreSQL backups with archive validation and a guarded restore script.
+Base manifest services and local host ports:
 
-## Reliability semantics
+| Service | Role | Base host ports | Persistent volume |
+| --- | --- | --- | --- |
+| postgres | PostgreSQL 17 application/collector/identity databases | 5432 | postgres_data |
+| redis | Cache/auth versions | 6379 | redis_data |
+| rabbitmq | Durable routing, retries and DLQ; Prometheus plugin | 5672, 15672 | rabbitmq_data |
+| keycloak | Realm/identity/M2M | 8080 | PostgreSQL database |
+| api | HTTP application | 8000 | None |
+| api-worker | Candle/trade consumers using API image | None | None |
+| datacollector | Pipeline API and optional cron | 8001 | Control tables and archive |
+| s3mock | Local S3-compatible raw object storage | 9092 -> 9090 | s3mock_data |
+| postgres-backup | Optional periodic application dump | None; backup profile | postgres_backups |
+| postgres-exporter | PostgreSQL metrics | Internal 9187 | None |
+| redis-exporter | Redis metrics | Internal 9121 | None |
+| prometheus | Scraping/rules, 15-day metric retention | 9091 -> 9090 | prometheus_data |
+| alertmanager | Alert grouping/inhibition; no external receiver configured | 9093 | alertmanager_data |
+| loki | Log storage | 3100 | loki_data |
+| alloy | Opted-in Docker log discovery/forwarding | 12345 | alloy_data |
+| grafana | Provisioned dashboards and data sources | 3000 | grafana_data |
 
-The system uses at-least-once delivery. Idempotent sinks, stable source IDs, natural-key constraints, and upserts protect repeated ingestion. It does not claim exactly-once processing. A process can stop after a sink commit and before step completion is recorded; resume can therefore repeat a completed external effect.
+Base published ports bind 127.0.0.1. The implicit development override changes some bindings [D01](review.md#d01). Backend services share the backend bridge. Prometheus/exporters/Alloy bridge into monitoring where needed; Grafana/Loki/Alertmanager use monitoring. Network and volume names derive from COMPOSE_PROJECT_NAME. Fixed container_name values prevent ordinary Compose replica scaling.
 
-Collector advisory locks prevent duplicate pipelines across replicas, but APScheduler itself is in process. A production schedule belongs in EventBridge Scheduler, Kubernetes CronJob, or another durable orchestrator. RabbitMQ is retained as a reliability learning component; a future SQS adapter should compare delivery semantics rather than run two brokers without a requirement.
+API and collector images use Python 3.12 slim, a builder with uv, frozen production dependency installation, and a non-root appuser runtime. Deployment context paths require sibling checkouts. The worker reuses the API image with `python -m app.worker`; it has no separate build definition or HTTP server.
 
-## Security model
+## End-to-end runtime sequence
 
-All public host ports bind to loopback in the lab. Application images run as an unprivileged user. Secrets are injected from environment or Jenkins credentials and are not included in images. Authorization checks issuer, audience, authorized client, roles, and permission bitmaps.
+1. Initialize PostgreSQL on a new volume; its init script creates the separate Keycloak role/database. Init scripts do not rerun on an existing initialized volume.
+2. Start infrastructure. Keycloak imports the supplied realm, including service clients and data_ingest/pipeline_operator roles.
+3. Run collector migrations and API migrations explicitly. Neither HTTP entrypoint performs upgrades.
+4. Start API HTTP, API worker and collector. Compose disables API HTTP consumers and enables the worker. The collector optionally initializes archive/control storage and scheduling.
+5. Submit listing: industry catalog -> API ID lookup -> stocks -> API ID lookup -> index memberships.
+6. Submit company collection: six per-stock operations delivered through HTTP. Three collections reconcile snapshots; event/news preserve absent history.
+7. Submit market collection: history/trade chunks -> RabbitMQ -> API consumers -> PostgreSQL upsert -> acknowledgement.
+8. Read canonical data via permission-protected API routes; recent bars may use Redis. Monitor collector statuses, worker logs, actual table contents and broker backlog separately.
 
-The lab still uses Keycloak development mode and HTTP. Jenkins Docker-in-Docker is privileged by design and is a lab trust boundary, not a production isolation mechanism.
+```mermaid
+sequenceDiagram
+    participant O as Operator
+    participant C as Collector
+    participant S as Provider
+    participant A as Raw archive
+    participant Q as RabbitMQ
+    participant W as API worker
+    participant D as PostgreSQL
+    O->>C: POST market run
+    C-->>O: 202 job_id
+    C->>D: Acquire lock and create run
+    C->>S: Fetch symbol data
+    S-->>C: DataFrame
+    C->>A: Capture source response
+    C->>Q: Publish canonical chunk
+    Q-->>C: Publisher confirmation
+    C->>D: Step/watermark and run completion
+    Q->>W: Deliver message
+    W->>D: Validate stock and upsert
+    D-->>W: Commit
+    W->>Q: Acknowledge
+```
 
-## Production gaps
+Collector and consumer timing can interleave; the sequence highlights that run completion has no consumer persistence barrier. A completed collector run does not establish a complete dataset. The same run has no full-project transaction across services. In the shipped fresh database, the market persistence step currently fails because ORM enum types disagree with migrations (API A17). The runtime review observed valid messages reaching DLQ; the diagram's commit/ack sequence requires that blocker to be fixed.
 
-- TLS ingress, stable DNS and OIDC issuer, managed secrets, key rotation, and least-privilege cloud IAM.
-- Managed PostgreSQL with automated backup, PITR, restore drills, multi-AZ design, and connection sizing.
-- Managed and encrypted object storage with versioning, lifecycle rules, access logging, and separate raw or Loki prefixes.
-- Immutable image digests, vulnerability scanning, SBOM, signing, provenance, and admission policy.
-- Durable scheduling, deployment orchestration, autoscaling limits, disruption budgets, and network policy.
-- Load and chaos baselines for throughput, latency, CPU, memory, queue recovery, RPO, RTO, and cloud cost.
-- Complete data-quality rules and an outbox or spool for the source-to-broker gap.
+## Identity and data boundaries
 
-No microservice rewrite is required before these controls. The current boundaries are sufficient for certificate labs and incremental cloud migration.
+API verifies identity JWTs against configured Keycloak issuer/audience and issues separate context JWTs with scope/permission/version claims. Collector operator routes introspect Keycloak tokens and require pipeline_operator. Outbound collector HTTP calls use client credentials with data_ingest. Broker ingestion trusts access to the broker plus schema/domain validation.
+
+Imported Keycloak realm roles do not seed API permission rows or user assignments. First-admin bootstrap is missing [A14](../../StockTracker.API/docs/review.md#a14). A browser token issued through localhost can have a different issuer from the API's internal keycloak URL; this path needs deliberate hostname configuration.
+
+Application tables are documented in [API source reference](../../StockTracker.API/docs/reference.md). Provider conversion is documented in [collector provider contract](../../StockTracker.DataCollector/docs/provider-contract.md). Canonical units, adjustment policies, tenant browsing requirements and complete trade coverage are unresolved business decisions.
+
+## Monitoring and recovery
+
+Prometheus scrapes API, collector, PostgreSQL exporter, Redis exporter, RabbitMQ and itself. It does not scrape the separate worker. Application metrics are process-local counters and durations; collector success timestamps are not restored from durable run state. Queue-label and absent-freshness issues are [D03](review.md#d03) and [C04](../../StockTracker.DataCollector/docs/review.md#c04).
+
+Alloy watches Docker containers and keeps only logging=true targets. It labels by container/Compose service/project and forwards to Loki. API/worker/collector and the backup service opt in. Grafana provisions dashboards and Loki/Prometheus data sources. Alertmanager groups alerts but has no configured external notification channel.
+
+The backup profile writes compressed application database dumps to a local named volume, checks archive readability, and removes old dump files. It does not back up the separate Keycloak database or off-host state [D02](review.md#d02). Restore is a manually invoked destructive operation protected by RESTORE_CONFIRM. The review exercised a limited disposable application/collector database restore. Complete identity/archive recovery remains unimplemented.
+
+## Jenkins flow
+
+Jenkins checks out API/collector at the requested branch and Deployment through checkout scm. It runs lint/type/content/audit checks and tests, builds/tags images with source metadata, runs the data-foundation smoke, pushes images, then optionally deploys staging. SKIP_TESTS skips lint/unit/HTTP test stages but not the data-foundation stage. DEPLOY=false does not suppress image publication.
+
+Staging starts infrastructure, migrates collector then API, and recreates application containers. An EXIT trap attempts application image rollback on failure by retagging previous images; it does not roll back database schema. Production deliberately raises an error.
+
+The standalone Jenkins Compose uses a privileged Docker-in-Docker daemon, shared Jenkins workspace storage, and environment/credential IDs. Deployments target that configured daemon. It is not automatically a remote staging/production environment. See [operations](operations.md) for prerequisites and limitations.

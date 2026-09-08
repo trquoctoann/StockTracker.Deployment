@@ -1,0 +1,525 @@
+{
+  "date": "2026-09-05",
+  "project": "stocktracker-review-20260905-b1",
+  "meaning": "Diagnostic observations; fixture-assisted results are not baseline regression passes.",
+  "source": {
+    "api": "353c531",
+    "collector": "c157150",
+    "deployment": "b76224e"
+  },
+  "observations": [
+    {
+      "probe": "C03_repeated_resume",
+      "first_step_executed_in_attempts": [
+        0,
+        2
+      ],
+      "statuses": [
+        "failed",
+        "failed",
+        "completed"
+      ]
+    },
+    {
+      "probe": "C02_s3_dataframe_roundtrip",
+      "same_values": true,
+      "original_attrs": {
+        "source": "KBS"
+      },
+      "loaded_attrs": {},
+      "metadata_source": "KBS"
+    },
+    {
+      "probe": "archive_checksum_rejection",
+      "status": "PASS"
+    },
+    {
+      "probe": "C05_recovery_before_threshold",
+      "recovered": 0
+    },
+    {
+      "probe": "C05_after_threshold_without_recovery",
+      "status": "running"
+    },
+    {
+      "probe": "stale_recovery_explicit",
+      "recovered": 1,
+      "status": "abandoned"
+    },
+    {
+      "probe": "cancellation_lock_release",
+      "status": "cancelled"
+    },
+    {
+      "probe": "keycloak_m2m",
+      "status": "PASS"
+    },
+    {
+      "probe": "A14_fresh_bootstrap",
+      "users": 0,
+      "roles": 0,
+      "permissions": 0
+    },
+    {
+      "probe": "auth_reject",
+      "anonymous": 401,
+      "invalid": 500,
+      "m2m_admin": 401
+    },
+    {
+      "probe": "catalog_persistence",
+      "first": {
+        "created": 1,
+        "updated": 0,
+        "skipped": 0
+      },
+      "repeated": {
+        "created": 0,
+        "updated": 0,
+        "skipped": 1
+      },
+      "stock_id": 1
+    },
+    {
+      "probe": "identity_claims",
+      "claims": {
+        "sub": null,
+        "iss": "http://keycloak:8080/realms/stocktracker",
+        "aud": "account",
+        "azp": "stocktracker.api"
+      }
+    },
+    {
+      "probe": "D06_missing_subject",
+      "http": 401
+    },
+    {
+      "probe": "test_only_basic_scope",
+      "subject_present": true
+    },
+    {
+      "probe": "identity_before_fixture",
+      "account_status": 404
+    },
+    {
+      "probe": "identity_context_exchange",
+      "status": "PASS"
+    },
+    {
+      "probe": "A01_http_commit",
+      "cold_http": 201,
+      "cold_rows": 0,
+      "warm_http": 201,
+      "warm_rows": 1
+    },
+    {
+      "probe": "A13_shareholders",
+      "first_http": 500,
+      "repeat_http": 200,
+      "rows": 1,
+      "validation": null
+    },
+    {
+      "probe": "A13_officers",
+      "first_http": 500,
+      "repeat_http": 200,
+      "rows": 1,
+      "validation": null
+    },
+    {
+      "probe": "A13_affiliations",
+      "first_http": 500,
+      "repeat_http": 200,
+      "rows": 1,
+      "validation": null
+    },
+    {
+      "probe": "A13_events",
+      "first_http": 500,
+      "repeat_http": 200,
+      "rows": 1,
+      "validation": null
+    },
+    {
+      "probe": "A13_news",
+      "first_http": 500,
+      "repeat_http": 200,
+      "rows": 1,
+      "validation": null
+    },
+    {
+      "probe": "A03_joined_count",
+      "http": 500
+    },
+    {
+      "probe": "A05_related_order",
+      "http": 500
+    },
+    {
+      "probe": "A07_bars_limit",
+      "http": 500
+    },
+    {
+      "probe": "A15_unknown_permission",
+      "http": 500
+    },
+    {
+      "probe": "A11_rollback_cache",
+      "database_role_version": 1,
+      "cached": {
+        "stocktracker:user_role:b2c67659-ae88-4692-832f-3b56d5e5fa07:ADMIN:null:version": "1",
+        "stocktracker:role:1:version": "2"
+      },
+      "protected_http": 401
+    },
+    {
+      "probe": "A17_migration_model_enum_mismatch",
+      "candle_rows": 0,
+      "trade_rows": 0,
+      "database_types": [
+        {
+          "table_name": "stock_price_history",
+          "column_name": "interval",
+          "data_type": "character varying",
+          "udt_name": "varchar"
+        },
+        {
+          "table_name": "stock_intraday",
+          "column_name": "match_type",
+          "data_type": "character varying",
+          "udt_name": "varchar"
+        }
+      ]
+    },
+    {
+      "probe": "baseline_valid_message_dead_letter",
+      "queue": "stocktracker.stock_price_history.sync.dead",
+      "present": true,
+      "retries": 3
+    },
+    {
+      "probe": "baseline_valid_message_dead_letter",
+      "queue": "stocktracker.stock_intraday.sync.dead",
+      "present": true,
+      "retries": 3
+    },
+    {
+      "probe": "test_only_enum_alignment",
+      "applied": true
+    },
+    {
+      "probe": "A06_cache_after_consumer_upsert",
+      "first": [
+        {
+          "id": 1,
+          "time": "2026-09-04T00:00:00",
+          "interval": "1D",
+          "open": 100.0,
+          "high": 120.0,
+          "low": 90.0,
+          "close": 110.0,
+          "volume": 1000.0,
+          "stock_id": 1
+        }
+      ],
+      "second": [
+        {
+          "id": 1,
+          "time": "2026-09-04T00:00:00",
+          "interval": "1D",
+          "open": 100.0,
+          "high": 120.0,
+          "low": 90.0,
+          "close": 110.0,
+          "volume": 1000.0,
+          "stock_id": 1
+        }
+      ],
+      "database_close": 115
+    },
+    {
+      "probe": "mq_candle_upsert",
+      "rows": 1
+    },
+    {
+      "probe": "mq_trade_redelivery",
+      "rows": 1,
+      "volume": 20
+    },
+    {
+      "probe": "mq_dead_letter",
+      "queue": "stocktracker.stock_price_history.sync.dead",
+      "present": true,
+      "retries": null
+    },
+    {
+      "probe": "mq_dead_letter",
+      "queue": "stocktracker.stock_intraday.sync.dead",
+      "present": true,
+      "retries": 3
+    },
+    {
+      "probe": "C01_duplicate_batch",
+      "inserted": 0
+    },
+    {
+      "probe": "D03_aggregated_scrape",
+      "samples": [
+        "rabbitmq_queue_messages_ready 2",
+        "rabbitmq_queue_messages_ready_ram 2",
+        "rabbitmq_queue_messages_ready_bytes 306"
+      ]
+    },
+    {
+      "probe": "C04_freshness_sample",
+      "samples": []
+    },
+    {
+      "probe": "collector_operator_routes",
+      "paths": [
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/run/vnstock-listing",
+        "/run/vnstock-company",
+        "/run/vnstock-market-data",
+        "/run/jobs/{job_id}"
+      ]
+    },
+    {
+      "probe": "operator_authorization",
+      "principal": "anonymous",
+      "http": 401
+    },
+    {
+      "probe": "operator_authorization",
+      "principal": "m2m",
+      "http": 404
+    },
+    {
+      "probe": "operator_authorization",
+      "principal": "ordinary_user",
+      "http": 401
+    },
+    {
+      "probe": "D07_keycloak_admin_realm",
+      "profile_http": 500
+    },
+    {
+      "probe": "test_only_realm_admin",
+      "profile_http": 200
+    },
+    {
+      "probe": "A01_A12_profile_split",
+      "http": 200,
+      "keycloak_first_name": "ChangedReview",
+      "database_first_name": "Review"
+    },
+    {
+      "probe": "A09_weak_password",
+      "http": 204
+    },
+    {
+      "probe": "A02_user_route",
+      "http": 201,
+      "log_marker": "synthetic sentinel only"
+    },
+    {
+      "probe": "A08_profile_only_update",
+      "http": 422
+    },
+    {
+      "probe": "A10_revoked_context",
+      "protected_http": 401,
+      "account_http": 200
+    },
+    {
+      "probe": "D04_stopped_worker",
+      "persisted_rows": 0
+    },
+    {
+      "probe": "worker_resumed",
+      "persisted_rows": 1
+    },
+    {
+      "probe": "prometheus_targets",
+      "targets": [
+        {
+          "job": "postgres",
+          "health": "up"
+        },
+        {
+          "job": "prometheus",
+          "health": "up"
+        },
+        {
+          "job": "rabbitmq",
+          "health": "up"
+        },
+        {
+          "job": "redis",
+          "health": "up"
+        },
+        {
+          "job": "stocktracker-api",
+          "health": "up"
+        },
+        {
+          "job": "stocktracker-datacollector",
+          "health": "up"
+        }
+      ]
+    },
+    {
+      "probe": "D03_dlq_selector",
+      "result": {
+        "status": "success",
+        "data": {
+          "resultType": "vector",
+          "result": []
+        }
+      }
+    },
+    {
+      "probe": "C04_stale_selector",
+      "result": {
+        "status": "success",
+        "data": {
+          "resultType": "vector",
+          "result": []
+        }
+      }
+    },
+    {
+      "probe": "live_provider",
+      "operation": "industries_icb",
+      "status": "PASS",
+      "rows": 177,
+      "columns": [
+        "icb_name",
+        "en_icb_name",
+        "icb_code",
+        "level"
+      ],
+      "normalized": null
+    },
+    {
+      "probe": "live_provider",
+      "operation": "symbols_by_exchange",
+      "status": "PASS",
+      "rows": 3416,
+      "columns": [
+        "symbol",
+        "organ_name",
+        "en_organ_name",
+        "exchange",
+        "type",
+        "id"
+      ],
+      "normalized": null
+    },
+    {
+      "probe": "live_provider",
+      "operation": "company_overview",
+      "status": "PASS",
+      "rows": 1,
+      "columns": [
+        "business_model",
+        "symbol",
+        "founded_date",
+        "charter_capital",
+        "number_of_employees",
+        "listing_date",
+        "par_value",
+        "exchange",
+        "listing_price",
+        "listed_volume",
+        "ceo_name",
+        "ceo_position",
+        "inspector_name",
+        "inspector_position",
+        "establishment_license",
+        "business_code",
+        "tax_id",
+        "auditor",
+        "company_type",
+        "address",
+        "phone",
+        "fax",
+        "email",
+        "website",
+        "branches",
+        "history",
+        "free_float_percentage",
+        "free_float",
+        "outstanding_shares",
+        "as_of_date"
+      ],
+      "normalized": "CompanyProfileSync"
+    },
+    {
+      "probe": "live_provider",
+      "operation": "quote_history",
+      "status": "PASS",
+      "rows": 5,
+      "columns": [
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "normalized": 5
+    },
+    {
+      "probe": "live_provider",
+      "operation": "quote_intraday",
+      "status": "PASS",
+      "rows": 100,
+      "columns": [
+        "time",
+        "price",
+        "volume",
+        "match_type",
+        "id"
+      ],
+      "normalized": 100
+    },
+    {
+      "probe": "loki_http_readiness",
+      "http": 503,
+      "body": "Ingester not ready: waiting for 15s after being ready\n"
+    },
+    {
+      "probe": "grafana_http_readiness",
+      "http": 200,
+      "body": "{\n  \"database\": \"ok\",\n  \"version\": \"12.4.2\",\n  \"commit\": \"ebade4c739e1aface4ce094934ad85374887a680\"\n}"
+    },
+    {
+      "probe": "loki_log_query",
+      "http": 200,
+      "streams": 1
+    }
+  ],
+  "additional_checks": {
+    "foundation_smoke": "PASS",
+    "synthetic_password_found_in_api_logs": true,
+    "worker_health_while_stopped": "healthy",
+    "restore_guard": "PASS",
+    "restore_selected_counts_match": true,
+    "restored_counts": {
+      "user": 2,
+      "stock": 2,
+      "company_shareholder": 1,
+      "stock_price_history": 2,
+      "stock_intraday": 1,
+      "collector.pipeline_runs": 8
+    },
+    "restored_api_revision": "20260829000001",
+    "restored_collector_revision": "202608300001",
+    "restored_keycloak_user_entity_tables": 0,
+    "diagnostic_sequence_completed": true,
+    "disposable_containers_and_volumes_removed": true
+  }
+}
